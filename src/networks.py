@@ -117,6 +117,28 @@ class EdgeGenerator(BaseNetwork):
     def __init__(self, residual_blocks=8, use_spectral_norm=True, init_weights=True):
         super(EdgeGenerator, self).__init__()
 
+        self.pde_args = {
+            'K': 1,
+            'separable': False,
+            'nonlinear_pde': True,
+            'cDx': 1.,
+            'cDy': 1.,
+            'dx': 1,
+            'dy': 1,
+            'dt': 0.2,
+            'init_h0_h': False,
+            'use_silu': False,
+            'use_res': False,
+            'constant_Dxy': False,
+            'custom_uv': '',
+            'custom_dxy': '',
+            'no_f': False,
+            'cell_type': 'BasicBlock',
+            'old_style': False,  # True,
+        }
+
+        self.global_layer = GlobalFeatureBlock_Diffusion(256, self.pde_args)
+
         self.encoder = nn.Sequential(
             nn.ReflectionPad2d(3),
             spectral_norm(nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, padding=0), use_spectral_norm),
@@ -133,7 +155,8 @@ class EdgeGenerator(BaseNetwork):
         )
 
         blocks = []
-        for _ in range(residual_blocks):
+        # for _ in range(residual_blocks):
+        for _ in range(1):
             block = ResnetBlock(256, 2, use_spectral_norm=use_spectral_norm)
             blocks.append(block)
 
@@ -158,6 +181,7 @@ class EdgeGenerator(BaseNetwork):
     def forward(self, x):
         x = self.encoder(x)
         x = self.middle(x)
+        x = self.global_layer(x)
         x = self.decoder(x)
         x = torch.sigmoid(x)
         return x

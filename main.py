@@ -7,7 +7,7 @@ import argparse
 from shutil import copyfile
 from src.config import Config
 from src.edge_connect import EdgeConnect
-
+from thop import profile
 
 def main(mode=None):
     r"""starts the model

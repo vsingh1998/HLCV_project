@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
-
+import os
+os.environ['TORCH_HOME'] = './models'
 
 class AdversarialLoss(nn.Module):
     r"""
