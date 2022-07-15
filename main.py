@@ -89,11 +89,11 @@ def load_config(mode=None):
     args = parser.parse_args()
     config_path = os.path.join(args.path, 'config.yml')
 
-    # create checkpoints path if does't exist
+    # create checkpoints path if doesn't exist
     if not os.path.exists(args.path):
         os.makedirs(args.path)
 
-    # copy config template if does't exist
+    # copy config template if doesn't exist
     if not os.path.exists(config_path):
         copyfile('./config.yml.example', config_path)
 

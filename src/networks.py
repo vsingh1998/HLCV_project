@@ -4,6 +4,7 @@ import torch.nn as nn
 from .global_layer import GlobalFeatureBlock_Diffusion
 
 INPLACE = True
+GLOBAL_LAYER = True
 
 class BaseNetwork(nn.Module):
     def __init__(self):
@@ -43,23 +44,23 @@ class InpaintGenerator(BaseNetwork):
         super(InpaintGenerator, self).__init__()
 
         self.pde_args = {
-            'K':             1, 
-            'separable':     False, 
-            'nonlinear_pde': True, 
-            'cDx' :          1.,
-            'cDy' :          1.,
-            'dx' :           1,
-            'dy' :           1,
-            'dt' :           0.2, 
-            'init_h0_h':     False,
-            'use_silu' :     False,
-            'use_res' :      False,
-            'constant_Dxy':  False,
-            'custom_uv':     '',
-            'custom_dxy':    '',
-            'no_f' :         False,
-            'cell_type' :    'BasicBlock',
-            'old_style' :    False, # True, 
+            'K':            1,
+            'separable':    False,
+            'nonlinear_pde':True,
+            'cDx':          1.,
+            'cDy':          1.,
+            'dx':           1,
+            'dy':           1,
+            'dt':           0.2,
+            'init_h0_h':    False,
+            'use_silu':     False,
+            'use_res':      False,
+            'constant_Dxy': False,
+            'custom_uv':    '',
+            'custom_dxy':   '',
+            'no_f':         False,
+            'cell_type':    'BasicBlock',
+            'old_style':    False,
         }
 
         self.global_layer = GlobalFeatureBlock_Diffusion(256, self.pde_args)
@@ -80,8 +81,8 @@ class InpaintGenerator(BaseNetwork):
         )
 
         blocks = []
-        # for _ in range(residual_blocks):
-        for _ in range(1):
+        num_resnet_blocks = 1 if GLOBAL_LAYER else residual_blocks
+        for _ in range(num_resnet_blocks):
             block = ResnetBlock(256, 2)
             blocks.append(block)
 
@@ -106,7 +107,8 @@ class InpaintGenerator(BaseNetwork):
     def forward(self, x):
         x = self.encoder(x)
         x = self.middle(x)
-        x = self.global_layer(x)
+        if GLOBAL_LAYER:
+            x = self.global_layer(x)
         x = self.decoder(x)
         x = (torch.tanh(x) + 1) / 2
 
@@ -155,9 +157,9 @@ class EdgeGenerator(BaseNetwork):
         )
 
         blocks = []
-        # for _ in range(residual_blocks):
-        for _ in range(1):
-            block = ResnetBlock(256, 2, use_spectral_norm=use_spectral_norm)
+        num_resnet_blocks = 1 if GLOBAL_LAYER else residual_blocks
+        for _ in range(num_resnet_blocks):
+            block = ResnetBlock(256, 2)
             blocks.append(block)
 
         self.middle = nn.Sequential(*blocks)
@@ -181,7 +183,8 @@ class EdgeGenerator(BaseNetwork):
     def forward(self, x):
         x = self.encoder(x)
         x = self.middle(x)
-        x = self.global_layer(x)
+        if GLOBAL_LAYER:
+            x = self.global_layer(x)
         x = self.decoder(x)
         x = torch.sigmoid(x)
         return x
