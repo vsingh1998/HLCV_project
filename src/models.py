@@ -27,7 +27,7 @@ class BaseModel(nn.Module):
                 data = torch.load(self.gen_weights_path, map_location=lambda storage, loc: storage)
 
             self.generator.load_state_dict(data['generator'])
-            self.iteration = data['iteration']
+            # self.iteration = data['iteration']
 
         # load discriminator only when training
         if self.config.MODE == 1 and os.path.exists(self.dis_weights_path):
@@ -84,8 +84,9 @@ class EdgeModel(BaseModel):
             betas=(config.BETA1, config.BETA2)
         )
 
-    def process(self, images, edges, masks):
-        self.iteration += 1
+    def process(self, images, edges, masks, iteration_flag=True):
+        if iteration_flag:
+            self.iteration += 1
 
 
         # zero optimizers
@@ -188,8 +189,9 @@ class InpaintingModel(BaseModel):
             betas=(config.BETA1, config.BETA2)
         )
 
-    def process(self, images, edges, masks):
-        self.iteration += 1
+    def process(self, images, edges, masks, iteration_flag=True):
+        if iteration_flag:
+            self.iteration += 1
 
         # zero optimizers
         self.gen_optimizer.zero_grad()

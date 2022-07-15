@@ -7,9 +7,7 @@ from .models import EdgeModel, InpaintingModel
 from .utils import Progbar, create_dir, stitch_images, imsave
 from .metrics import PSNR, EdgeAccuracy
 from torch.utils.tensorboard import SummaryWriter
-import torchsummary
-writer = SummaryWriter(log_dir=os.path.join("./logs"))
-from thop import profile
+
 
 
 class EdgeConnect():
@@ -100,22 +98,6 @@ class EdgeConnect():
 
             progbar = Progbar(total, width=20, stateful_metrics=['epoch', 'iter'])
 
-
-            print("\n\n========== Trainable Paramets=============")
-
-            macs, params = profile(self.edge_model, inputs=(torch.rand(1,1,256,256).to(self.config.DEVICE),
-                                                            torch.rand(1,1,256,256).to(self.config.DEVICE),
-                                                            torch.rand(1,1,256,256).to(self.config.DEVICE)))
-
-            # print(torchsummary.summary(self.edge_model, (torch.rand(1,1,256,256).to(self.config.DEVICE),
-            #                                                 torch.rand(1,1,256,256).to(self.config.DEVICE),
-            #                                                 torch.rand(1,1,256,256).to(self.config.DEVICE))))
-
-            edge_model_params = sum(p.numel() for p in self.edge_model.parameters() if p.requires_grad)
-            # inpaint_model_params = sum(p.numel() for p in self.inpaint_model.parameters() if p.requires_grad)
-            print(f"Edge Model : {macs}, {params}, {edge_model_params}")
-            # print(f"Inpaint Model : {inpaint_model_params}")
-
             for items in train_loader:
                 self.edge_model.train()
                 self.inpaint_model.train()
@@ -132,15 +114,16 @@ class EdgeConnect():
                     logs.append(('precision', precision.item()))
                     logs.append(('recall', recall.item()))
 
-                    writer.add_scalar("Edge_Gen_Loss/Train", gen_loss, epoch)
-                    writer.add_scalar("Edge_Dis_Loss/Train", dis_loss, epoch)
-
-                    writer.add_scalar("Edge_Precision/Train", precision, epoch)
-                    writer.add_scalar("Edge_Recall/Train", recall, epoch)
-
                     # backward
+
                     self.edge_model.backward(gen_loss, dis_loss)
                     iteration = self.edge_model.iteration
+
+                    writer.add_scalar("Edge_Gen_Loss/Train", gen_loss, iteration)
+                    writer.add_scalar("Edge_Dis_Loss/Train", dis_loss, iteration)
+
+                    writer.add_scalar("Edge_Precision/Train", precision, iteration)
+                    writer.add_scalar("Edge_Recall/Train", recall, iteration)
 
 
                 # inpaint model
@@ -155,16 +138,16 @@ class EdgeConnect():
                     logs.append(('psnr', psnr.item()))
                     logs.append(('mae', mae.item()))
 
-                    writer.add_scalar("Inpaint_Gen_Loss/Train", gen_loss, epoch)
-                    writer.add_scalar("Inpaint_Dis_Loss/Train", dis_loss, epoch)
-
-                    writer.add_scalar("Inpaint_PSNR/Train", psnr, epoch)
-                    writer.add_scalar("Inpaint_MAE/Train", mae, epoch)
 
                     # backward
                     self.inpaint_model.backward(gen_loss, dis_loss)
                     iteration = self.inpaint_model.iteration
 
+                    writer.add_scalar("Inpaint_Gen_Loss/Train", gen_loss, iteration)
+                    writer.add_scalar("Inpaint_Dis_Loss/Train", dis_loss, iteration)
+
+                    writer.add_scalar("Inpaint_PSNR/Train", psnr, iteration)
+                    writer.add_scalar("Inpaint_MAE/Train", mae, iteration)
 
                 # inpaint with edge model
                 elif model == 3:
@@ -184,15 +167,17 @@ class EdgeConnect():
                     logs.append(('psnr', psnr.item()))
                     logs.append(('mae', mae.item()))
 
-                    writer.add_scalar("EdgeInpaint_Gen_Loss/Train", gen_loss, epoch)
-                    writer.add_scalar("EdgeInpaint_Dis_Loss/Train", dis_loss, epoch)
-
-                    writer.add_scalar("EdgeInpaint_PSNR/Train", psnr, epoch)
-                    writer.add_scalar("EdgeInpaint_MAE/Train", mae, epoch)
 
                     # backward
                     self.inpaint_model.backward(gen_loss, dis_loss)
                     iteration = self.inpaint_model.iteration
+
+                    writer.add_scalar("EdgeInpaint_Gen_Loss/Train", gen_loss, iteration)
+                    writer.add_scalar("EdgeInpaint_Dis_Loss/Train", dis_loss, iteration)
+
+                    writer.add_scalar("EdgeInpaint_PSNR/Train", psnr, iteration)
+                    writer.add_scalar("EdgeInpaint_MAE/Train", mae, iteration)
+
 
 
                 # joint model
@@ -213,16 +198,18 @@ class EdgeConnect():
                     i_logs.append(('mae', mae.item()))
                     logs = e_logs + i_logs
 
-                    writer.add_scalar("Joint_Gen_Loss/Train", gen_loss, epoch)
-                    writer.add_scalar("Joint_Dis_Loss/Train", dis_loss, epoch)
-
-                    writer.add_scalar("Joint_PSNR/Train", psnr, epoch)
-                    writer.add_scalar("Joint_MAE/Train", mae, epoch)
 
                     # backward
                     self.inpaint_model.backward(i_gen_loss, i_dis_loss)
                     self.edge_model.backward(e_gen_loss, e_dis_loss)
                     iteration = self.inpaint_model.iteration
+
+
+                    writer.add_scalar("Joint_Gen_Loss/Train", gen_loss, iteration)
+                    writer.add_scalar("Joint_Dis_Loss/Train", dis_loss, iteration)
+
+                    writer.add_scalar("Joint_PSNR/Train", psnr, epoch)
+                    writer.add_scalar("Joint_MAE/Train", mae, epoch)
 
 
 
@@ -248,7 +235,7 @@ class EdgeConnect():
                 # evaluate model at checkpoints
                 if self.config.EVAL_INTERVAL and iteration % self.config.EVAL_INTERVAL == 0:
                     print('\nstart eval...\n')
-                    self.eval(epoch)
+                    self.eval(iteration, writer)
 
                 # save model at checkpoints
                 if self.config.SAVE_INTERVAL and iteration % self.config.SAVE_INTERVAL == 0:
@@ -256,7 +243,7 @@ class EdgeConnect():
 
         print('\nEnd training....')
 
-    def eval(self, epoch):
+    def eval(self, iteration_train=0, writer=None):
         val_loader = DataLoader(
             dataset=self.val_dataset,
             batch_size=self.config.BATCH_SIZE,
@@ -280,24 +267,18 @@ class EdgeConnect():
             # edge model
             if model == 1:
                 # eval
-                outputs, gen_loss, dis_loss, logs = self.edge_model.process(images_gray, edges, masks)
+                outputs, gen_loss, dis_loss, logs = self.edge_model.process(images_gray, edges, masks, iteration_flag=False)
 
                 # metrics
                 precision, recall = self.edgeacc(edges * masks, outputs * masks)
                 logs.append(('precision', precision.item()))
                 logs.append(('recall', recall.item()))
 
-                writer.add_scalar("Edge_Gen_Loss/Val", gen_loss, epoch)
-                writer.add_scalar("Edge_Dis_Loss/Val", dis_loss, epoch)
-
-                writer.add_scalar("Edge_Precision/Val", precision, epoch)
-                writer.add_scalar("Edge_Recall/Val", recall, epoch)
-
 
             # inpaint model
             elif model == 2:
                 # eval
-                outputs, gen_loss, dis_loss, logs = self.inpaint_model.process(images, edges, masks)
+                outputs, gen_loss, dis_loss, logs = self.inpaint_model.process(images, edges, masks, iteration_flag=False)
                 outputs_merged = (outputs * masks) + (images * (1 - masks))
 
                 # metrics
@@ -305,12 +286,6 @@ class EdgeConnect():
                 mae = (torch.sum(torch.abs(images - outputs_merged)) / torch.sum(images)).float()
                 logs.append(('psnr', psnr.item()))
                 logs.append(('mae', mae.item()))
-
-                writer.add_scalar("Inpaint_Gen_Loss/Val", gen_loss, epoch)
-                writer.add_scalar("Inpaint_Dis_Loss/Val", dis_loss, epoch)
-
-                writer.add_scalar("Inpaint_PSNR/Val", psnr, epoch)
-                writer.add_scalar("Inpaint_MAE/Val", mae, epoch)
 
 
             # inpaint with edge model
@@ -319,7 +294,7 @@ class EdgeConnect():
                 outputs = self.edge_model(images_gray, edges, masks)
                 outputs = outputs * masks + edges * (1 - masks)
 
-                outputs, gen_loss, dis_loss, logs = self.inpaint_model.process(images, outputs.detach(), masks)
+                outputs, gen_loss, dis_loss, logs = self.inpaint_model.process(images, outputs.detach(), masks, iteration_flag=False)
                 outputs_merged = (outputs * masks) + (images * (1 - masks))
 
                 # metrics
@@ -328,19 +303,13 @@ class EdgeConnect():
                 logs.append(('psnr', psnr.item()))
                 logs.append(('mae', mae.item()))
 
-                writer.add_scalar("EdgeInpaint_Gen_Loss/Val", gen_loss, epoch)
-                writer.add_scalar("EdgeInpaint_Dis_Loss/Val", dis_loss, epoch)
-
-                writer.add_scalar("EdgeInpaint_PSNR/Val", psnr, epoch)
-                writer.add_scalar("EdgeInpaint_MAE/Val", mae, epoch)
-
 
             # joint model
             else:
                 # eval
-                e_outputs, e_gen_loss, e_dis_loss, e_logs = self.edge_model.process(images_gray, edges, masks)
+                e_outputs, e_gen_loss, e_dis_loss, e_logs = self.edge_model.process(images_gray, edges, masks, iteration_flag=False)
                 e_outputs = e_outputs * masks + edges * (1 - masks)
-                i_outputs, i_gen_loss, i_dis_loss, i_logs = self.inpaint_model.process(images, e_outputs, masks)
+                i_outputs, i_gen_loss, i_dis_loss, i_logs = self.inpaint_model.process(images, e_outputs, masks, iteration_flag=False)
                 outputs_merged = (i_outputs * masks) + (images * (1 - masks))
 
                 # metrics
@@ -353,17 +322,35 @@ class EdgeConnect():
                 i_logs.append(('mae', mae.item()))
                 logs = e_logs + i_logs
 
-                writer.add_scalar("Joint_Gen_Loss/Val", gen_loss, epoch)
-                writer.add_scalar("Joint_Dis_Loss/Val", dis_loss, epoch)
-
-                writer.add_scalar("Joint_PSNR/Val", psnr, epoch)
-                writer.add_scalar("Joint_MAE/Val", mae, epoch)
-
-
 
 
             logs = [("it", iteration), ] + logs
             progbar.add(len(images), values=logs)
+        if writer:
+            if model == 1:
+                writer.add_scalar("Edge_Gen_Loss/Val", gen_loss, iteration_train)
+                writer.add_scalar("Edge_Dis_Loss/Val", dis_loss, iteration_train)
+
+                writer.add_scalar("Edge_Precision/Val", precision, iteration_train)
+                writer.add_scalar("Edge_Recall/Val", recall, iteration_train)
+            elif model == 2:
+                writer.add_scalar("Inpaint_Gen_Loss/Val", gen_loss, iteration_train)
+                writer.add_scalar("Inpaint_Dis_Loss/Val", dis_loss, iteration_train)
+
+                writer.add_scalar("Inpaint_PSNR/Val", psnr, iteration_train)
+                writer.add_scalar("Inpaint_MAE/Val", mae, iteration_train)
+            elif model == 3:
+                writer.add_scalar("EdgeInpaint_Gen_Loss/Val", gen_loss, iteration_train)
+                writer.add_scalar("EdgeInpaint_Dis_Loss/Val", dis_loss, iteration_train)
+
+                writer.add_scalar("EdgeInpaint_PSNR/Val", psnr, iteration_train)
+                writer.add_scalar("EdgeInpaint_MAE/Val", mae, iteration_train)
+            else:
+                writer.add_scalar("Joint_Gen_Loss/Val", gen_loss, iteration_train)
+                writer.add_scalar("Joint_Dis_Loss/Val", dis_loss, iteration_train)
+
+                writer.add_scalar("Joint_PSNR/Val", psnr, iteration_train)
+                writer.add_scalar("Joint_MAE/Val", mae, iteration_train)
 
     def test(self):
         self.edge_model.eval()

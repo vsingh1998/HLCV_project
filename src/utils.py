@@ -19,7 +19,7 @@ def create_mask(width, height, mask_width, mask_height, x=None, y=None):
     mask[mask_y:mask_y + mask_height, mask_x:mask_x + mask_width] = 1
     return mask
 
-def create_random_ff_mask(shape, max_angle=10, max_len=40, max_width=50, times=15):
+def create_random_ff_mask(shape, max_angle=10, max_len=30, max_width=20, times=10):
     """Generate a random free form mask with configuration.
     Args:
         config: Config should have configuration including IMG_SHAPES,
@@ -38,8 +38,8 @@ def create_random_ff_mask(shape, max_angle=10, max_len=40, max_width=50, times=1
             angle = 0.01 + np.random.randint(max_angle)
             if i % 2 == 0:
                 angle = 2 * 3.1415926 - angle
-            length = 10 + np.random.randint(max_len - 20, max_len)
-            brush_w = 5 + np.random.randint(max_width - 30, max_width)
+            length = 5 + np.random.randint(max_len - 20, max_len)
+            brush_w = 1 + np.random.randint(max_width - 10, max_width)
             end_x = (start_x + length * np.sin(angle)).astype(np.int32)
             end_y = (start_y + length * np.cos(angle)).astype(np.int32)
             cv2.line(mask, (start_y, start_x), (end_y, end_x), 1.0, brush_w)
