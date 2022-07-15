@@ -9,7 +9,7 @@ class BaseNetwork(nn.Module):
     def __init__(self):
         super(BaseNetwork, self).__init__()
 
-    def init_weights(self, init_type='normal', gain=0.02):
+    def init_weights(self, init_type='xavier', gain=0.02):
         '''
         initialize network's weights
         init_type: normal | xavier | kaiming | orthogonal
